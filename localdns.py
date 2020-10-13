@@ -2,31 +2,46 @@ from settings import settings
 from utility import parser
 
 class file:
-    def __init__(self):
+    '''
+    Read settings and load host file.
+    '''
+    def __init__(self, hosts='hosts', log_level=1):
         self.addr_dict = dict()
 
-        with open(settings.hosts, 'r') as f:
+        with open(hosts, 'r') as f:
             for line in f.readlines():
                 ip, addr = line.strip().split()
                 if self.addr_dict.__contains__(addr):
                     self.addr_dict[addr].append(ip)
                 else:
                     self.addr_dict[addr] = list([ip])
-        print(self.addr_dict)
+
+        if log_level != 0:
+            print('local dns:\n', self.addr_dict)
+            print('*' * 20)
     
     def lookup(self, addr):
+        '''
+        Try to find ip address correspondes to addr in local data.
+        '''
         if self.addr_dict.__contains__(addr):
             return True, self.addr_dict[addr]
         return False, list()
 
+
 class dns(file):
     def nslookup(self, request):
+        '''
+        Try to handle DNS request with local dns.
+        '''
         parse = parser(request)
         response = bytearray(request)
 
-        print(parse.QNAME)
+        if parse.QTYPE != 0x01:         # ignore ipv6 type request, turn to remote dns for help
+            return False, None
+
         flag, ip = self.lookup(parse.QNAME)
-        if flag == False:
+        if flag == False:               # QNAME not found
             return False, None
         else:
             response[2] |= 0x80         # set QR=1
@@ -35,33 +50,27 @@ class dns(file):
                 response[3] |= 0x03     # set RCODE=3
             else:
                 n_ip = len(ip)
+
                 def construct_resource_record(ip):
                     ret = bytearray()
-                    ret += bytearray.fromhex('c00c')    # RNAME
-                    ret += bytearray.fromhex('0001')    # RTYPE
-                    ret += bytearray.fromhex('0001')    # RCLASS
-                    ret += bytearray.fromhex('0002a300')   # TLL=24*3600sec
-                    ret += bytearray.fromhex('0004')    # RDLENGTH
-                    lst = ip.split('.')
-                    for byte in lst:
-                        ret.append(int(byte))           #RDATA
-                    # print(ret)
+                    ret += bytearray.fromhex('c00c')    # set RNAME
+                    ret += bytearray.fromhex('0001')    # set RTYPE
+                    ret += bytearray.fromhex('0001')    # set RCLASS
+                    ret += bytearray.fromhex('0002a300')   # set TLL=24*3600sec
+                    ret += bytearray.fromhex('0004')    # set RDLENGTH
+
+                    lst = ip.split('.')                 # construct RDATA
+                    for byte in lst:            
+                        ret.append(int(byte))           
                     return ret
 
                 for i in range(n_ip):
                     response += construct_resource_record(ip[i])
-
-                    # if response[7]==0xFF:
-                    #     response[6]+=1
-                    #     response[7]=0
-                    # else:
-                    #     response[7]+=1
                 
-                response[6] = (n_ip & 0xff00) >> 8
-                response[7] = n_ip & 0x00ff
+                response[6] = (n_ip & 0xff00) >> 8      # set ANCOUNT
+                response[7] = n_ip & 0x00ff             
 
             response = bytes(response)
-            print(response)
             return True, response
 
-localdns = dns()
+localdns = dns(settings.hosts, settings.log_level)

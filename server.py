@@ -1,27 +1,29 @@
 from settings import settings
-from utility import sys_pause, parser
-from threads import *
-
-
+from threads import server_socket, post_sockets, worker, threading
 
 def main():
-    # data = b'\x1a^\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06vortex\x04data\tmicrosoft\x03com\x00\x00\x01\x00\x01'
-    # udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # udpSocket.bind(("0.0.0.0", 7989))
-    # udpSocket.sendto(data, settings.remote_host)
-    # sys_pause()
-    w = worker(settings.max_queue_size)
-    threading.Thread(target=w.consumer).start()
-    threading.Thread(target=w.receiver).start()
+    w = worker(settings.max_queue_size, settings.max_buffer_size, settings.log_level)
+    threading_pool = []
+    threading_pool += [threading.Thread(target=w.consumer, args=[socket]) for socket in post_sockets]
+    threading_pool += [threading.Thread(target=w.receiver, args=[socket]) for socket in post_sockets]
     max_buffer_size = settings.max_buffer_size
+    for thd in threading_pool:
+        thd.start()
 
     while True:
-        request, addr = server_socket.recvfrom(max_buffer_size)
-        # print('haha')
-        parse = parser(request)
-        print(parse.QNAME)
-        # print(request)
-        threading.Thread(target=w.producer, args=(request, addr)).start()
+        flag = True             # to handle ConnectionResetError:[WinError10054]
+        while flag:
+            try:
+                request, addr = server_socket.recvfrom(max_buffer_size)
+                flag = False
+            except:
+                flag = True
+
+        thd = threading.Thread(target=w.producer, args=(request, addr))
+        thd.start()
+    
+    for thd in threading_pool:
+        thd.join()
 
 if __name__ == '__main__':
     main()

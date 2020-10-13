@@ -5,6 +5,9 @@ def sys_pause():
 
 class parser:
     def __init__(self, message):
+        '''
+        Parse a DNS request or response.
+        '''
         self.message = bytearray(message)
         self.ID = 0
         self.QR = 0
@@ -54,25 +57,15 @@ class parser:
         self.ARCOUNT = (self.message[10]<<8) + self.message[11]
 
     def parse_domain(self, pos):
-        # if self.QR == 1 or self.QR == 0:
-        #     print()
-        #     if (len(self.RTYPE)>0):
-        #         print(pos, self.RTYPE[-1])
-        #     print(self.message)
         lst = list()
         while self.message[pos] != 0:
-            if self.message[pos] == 0xc0:
+            if self.message[pos] == 0xc0:   # indicates message compression
                 pos += 2
                 break
             length = self.message[pos]
-            # print(length, end=' ')
-            # if (length > 40):
-            #     print(self.message)
-            # print(self.message[pos + 1:pos + length + 1].decode())
             try:
                 lst.append(self.message[pos + 1:pos + length + 1].decode())
             except UnicodeDecodeError:
-                # print(11111)
                 pass
             pos += length + 1
             
@@ -95,7 +88,6 @@ class parser:
         while total > 0:
             total -= 1
             domain = ''
-            # print('response', pos)
             if (self.message[pos] & 0xc0) == 0xc0:   # indicates message compression
                 offset = ((self.message[pos] & 0x3f) << 8) + self.message[pos + 1]
                 _, domain = self.parse_domain(offset)
