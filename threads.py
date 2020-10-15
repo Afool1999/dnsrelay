@@ -1,20 +1,9 @@
-import socket
 import threading
 import queue
 import time
 from settings import settings
 from localdns import localdns
 from utility import parser
-
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.bind(settings.local_host)
-
-post_sockets = []
-for post_host in settings.post_host:
-    p_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    p_socket.bind(post_host)
-    p_socket.connect(settings.remote_host)
-    post_sockets.append(p_socket)
 
 
 class worker:
@@ -38,7 +27,7 @@ class worker:
             print(message)
             self.print_lock.release()
 
-    def producer(self, request, addr):
+    def producer(self, request, addr, server_socket):
         '''
         Try to handle a DNS request with local DNS and decide whether turn to remote DNS for help.
         '''
@@ -74,7 +63,7 @@ class worker:
             request = self.queue.get()
             post_socket.send(request)
             
-    def receiver(self, post_socket):
+    def receiver(self, post_socket, server_socket):
         '''
         Receive response from remote DNS server.
         '''
